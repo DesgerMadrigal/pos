@@ -1,0 +1,18 @@
+# Ignorar entornos virtuales
+venv/
+
+# Ignorar carpetas de distribución/compilación
+build/
+dist/
+
+pos/__pycache__
+
+pos/ui/__pycache__
+pos/models/__pycache__
+
+# Ignorar archivos de especificación o logs
+*.spec
+*.txt
+
+# Ignorar iconos u otros binarios
+*.ico
