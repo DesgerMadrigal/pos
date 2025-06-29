@@ -1,47 +1,97 @@
-#product_frame.py
+"""
+product_frame.py
+----------------
+Gestión de productos: búsqueda, alta y envío de un producto seleccionado
+al carrito de la pestaña Ventas mediante el evento virtual <<AddToCart>>.
+"""
+
+from __future__ import annotations
+
+import random
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import Callable
+
 from ..models.product import ProductDAO
-import random        
+
 
 class ProductFrame(ttk.Frame):
-    def __init__(self, parent: tk.Misc, dao: ProductDAO):
+    """Pestaña «Productos» con lista, búsqueda y alta de artículos."""
+
+    def __init__(self, parent: tk.Misc, dao: ProductDAO) -> None:
         super().__init__(parent)
         self.dao = dao
         self._build_widgets()
         self._load()
 
-    # ------------------------------------------------------------------ UI
-    def _build_widgets(self):
-        bar = ttk.Frame(self); bar.pack(fill="x", pady=4)
-        self.search_var = tk.StringVar()
-        ttk.Entry(bar,textvariable=self.search_var,width=28)\
-            .pack(side="left",padx=4)
-        ttk.Button(bar,text="Buscar",command=self._load).pack(side="left")
-        ttk.Button(bar,text="Agregar Producto",
-                   command=self._open_add).pack(side="right",padx=4)
+    # ────────────────────────── UI ──────────────────────────
+    def _build_widgets(self) -> None:
+        bar = ttk.Frame(self)
+        bar.pack(fill="x", pady=4)
 
-        cols = ("ID","Código","Nombre","Unidad","Precio","Stock")
-        self.tree = ttk.Treeview(self,columns=cols,show="headings")
+        # búsqueda rápida
+        self.search_var = tk.StringVar()
+        ttk.Entry(bar, textvariable=self.search_var, width=28).pack(
+            side="left", padx=4
+        )
+        ttk.Button(bar, text="Buscar", command=self._load).pack(side="left")
+
+        # ── botones de acción (derecha) ──────────────────────
+        ttk.Button(
+            bar, text="Añadir a carrito", command=self._send_to_cart
+        ).pack(side="right", padx=4)
+        ttk.Button(
+            bar, text="Agregar Producto", command=self._open_add
+        ).pack(side="right")
+
+        # tabla
+        cols = ("ID", "Código", "Nombre", "Unidad", "Precio", "Stock")
+        self.tree = ttk.Treeview(self, columns=cols, show="headings")
         for c in cols:
-            self.tree.heading(c,text=c); self.tree.column(c,anchor="center")
-        self.tree.pack(fill="both",expand=True,padx=6,pady=6)
-        col_widths = [60, 120, 220, 70, 90, 70]
-        for col, w in zip(cols, col_widths):
+            self.tree.heading(c, text=c)
+            self.tree.column(c, anchor="center")
+        self.tree.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # anchuras de columna
+        for col, w in zip(cols, (60, 120, 220, 70, 90, 70)):
             self.tree.column(col, width=w, anchor="center")
 
-    # -------------------------------------------------------------- helpers
-    def _load(self):
-        self.tree.delete(*self.tree.get_children())   # limpia la tabla
-        for values in self.dao.search(self.search_var.get()):
-            self.tree.insert("", "end", values=values)
+    # ────────────────────── datos / helpers ─────────────────
+    def _load(self) -> None:
+        """Recarga la tabla aplicando el filtro de búsqueda."""
+        self.tree.delete(*self.tree.get_children())
+        for row in self.dao.search(self.search_var.get()):
+            self.tree.insert("", "end", values=row)
 
-    def _open_add(self):
+    def _send_to_cart(self) -> None:
+        """Envía el producto seleccionado al carrito (evento global)."""
+        sel = self.tree.focus()
+        if not sel:
+            messagebox.showinfo("Selecciona", "Elige un producto primero")
+            return
+
+        product_id = int(self.tree.item(sel)["values"][0])
+
+        root = self.winfo_toplevel()           # ventana raíz (Tk)
+        root._product_to_add = product_id      # ← atributo temporal
+        root.event_generate("<<AddToCart>>", when="tail")
+
+    def _open_add(self) -> None:
+        """Abre la ventana emergente para crear un nuevo producto."""
         AddProductWindow(self, self.dao, on_save=self._load)
 
+
+# ════════════════════════════════════════════════════════════
+#  Ventana emergente de alta de producto
+# ════════════════════════════════════════════════════════════
 class AddProductWindow(tk.Toplevel):
-    def __init__(self, master, dao: ProductDAO, on_save):
+    """Formulario completo para registrar un producto."""
+
+    def __init__(
+        self,
+        master: ProductFrame,
+        dao: ProductDAO,
+        on_save,
+    ) -> None:
         super().__init__(master)
         self.dao, self.on_save = dao, on_save
         self.title("Agregar Producto")
@@ -49,70 +99,85 @@ class AddProductWindow(tk.Toplevel):
         self.resizable(False, False)
         self.columnconfigure(1, weight=1)
 
-        # ---------------- VALIDADORES -----------------
-        # solo dígitos enteros
-        v_int   = (self.register(lambda P: P == "" or P.isdigit()), "%P")
-        # números decimales: 123 o 123.45
-        v_float = (self.register(
-            lambda P: P == "" or (P.replace(".", "", 1).isdigit() and P.count(".") <= 1)
-        ), "%P")
+        # ── validadores ─────────────────────────────────────
+        v_int = (self.register(lambda P: P == "" or P.isdigit()), "%P")
+        v_float = (
+            self.register(
+                lambda P: P == ""
+                or (P.replace(".", "", 1).isdigit() and P.count(".") <= 1)
+            ),
+            "%P",
+        )
 
-        self.inputs = {}
-        fields = [
-            ("barcode",  "Código de barras",  None),      # se autogenera
-            ("name",     "Nombre",            None),
-            ("description","Descripción",     None),
-            ("unit",     "Unidad",            None),
-            ("price",    "Precio",            v_float),
-            ("discount", "Descuento (%)",     v_float),
-            ("iva",      "IVA (%)",           v_float),
-            ("sku",      "Clave/SKU",         None),
-            ("stock",    "Existencia",        v_int),
+        # campos de entrada
+        self.inputs: dict[str, tk.Entry] = {}
+        campos = [
+            ("barcode", "Código de barras", None),  # se autogenera
+            ("name", "Nombre", None),
+            ("description", "Descripción", None),
+            ("unit", "Unidad", None),
+            ("price", "Precio", v_float),
+            ("discount", "Descuento (%)", v_float),
+            ("iva", "IVA (%)", v_float),
+            ("sku", "Clave/SKU", None),  # se autogenera
+            ("stock", "Existencia", v_int),
         ]
 
-        for i, (key, label, vcmd) in enumerate(fields):
-            ttk.Label(self, text=label).grid(row=i, column=0, sticky="e", padx=5, pady=3)
-            ent = ttk.Entry(self, validate="key", validatecommand=vcmd) if vcmd else ttk.Entry(self)
+        for i, (key, lbl, vcmd) in enumerate(campos):
+            ttk.Label(self, text=lbl).grid(
+                row=i, column=0, sticky="e", padx=5, pady=3
+            )
+            ent = (
+                ttk.Entry(self, validate="key", validatecommand=vcmd)
+                if vcmd
+                else ttk.Entry(self)
+            )
             ent.grid(row=i, column=1, sticky="we", padx=5)
             self.inputs[key] = ent
 
-        # ---- Autogenera el código de barras ----
+        # autogenerar código de barras y SKU
+        self._init_auto_codes()
+
+        ttk.Button(self, text="Guardar", command=self._save).grid(
+            row=len(campos), columnspan=2, pady=10
+        )
+
+    # ─────────────────── auxiliares ────────────────────
+    def _init_auto_codes(self) -> None:
+        """Genera barcode y SKU únicos y los coloca en los campos."""
+        # EAN-13
         barcode = self._new_barcode()
         self.inputs["barcode"].insert(0, barcode)
-        self.inputs["barcode"]["state"] = "readonly"  # evita edición
+        self.inputs["barcode"]["state"] = "readonly"
 
-        # ---- Autogenera el SKU ----
+        # SKU
         sku = self._new_sku()
         self.inputs["sku"].insert(0, sku)
         self.inputs["sku"]["state"] = "readonly"
 
-
-        ttk.Button(self, text="Guardar", command=self._save)\
-            .grid(row=len(fields), columnspan=2, pady=10)
-
-    # ------------------------------------------------
     def _new_barcode(self) -> str:
-        """Genera un EAN-13 aleatorio y garantiza unicidad contra la BD."""
+        """Devuelve un EAN-13 único en la BD."""
         while True:
             code = "".join(random.choices("0123456789", k=13))
-            if not hasattr(self.dao, "barcode_exists") or not self.dao.barcode_exists(code):
+            if not self.dao.barcode_exists(code):
                 return code
 
     def _new_sku(self) -> str:
-        """Genera un SKU alfanumérico único (8 caracteres)."""
+        """Devuelve un SKU alfanumérico (8 car.) único en la BD."""
         chars = "ABCDEFGHJKLMNPQRTUVWXYZ23456789"
         while True:
             code = "".join(random.choices(chars, k=8))
             if not self.dao.sku_exists(code):
                 return code
 
-
-    def _save(self):
+    # ───────────────────────── guardar ─────────────────────────
+    def _save(self) -> None:
+        """Valida datos, crea el producto y registra stock inicial."""
         try:
             d = {k: v.get() for k, v in self.inputs.items()}
             stock_qty = int(d["stock"] or 0)
 
-            # 1) crea producto con stock=0 (se actualizará vía movimiento)
+            # 1) crea el producto con stock 0
             pid = self.dao.add(
                 barcode=d["barcode"],
                 name=d["name"],
@@ -125,9 +190,9 @@ class AddProductWindow(tk.Toplevel):
                 stock=0,
             )
 
-            # 2) registra inventario inicial (almacén 1)
+            # 2) registra el inventario inicial en almacén 1
             if stock_qty > 0:
-                from ..models.inventory import InventoryDAO  # import local
+                from ..models.inventory import InventoryDAO
 
                 InventoryDAO(self.dao.conn).move(
                     product_id=pid,
@@ -139,5 +204,5 @@ class AddProductWindow(tk.Toplevel):
             messagebox.showinfo("Éxito", "Producto registrado")
             self.on_save()
             self.destroy()
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+        except Exception as exc:
+            messagebox.showerror("Error", str(exc))

@@ -50,9 +50,17 @@ class AddClientWindow(tk.Toplevel):
         if not d["name"]:
             messagebox.showerror("Falta nombre","El nombre es obligatorio"); return
         try:
-            self.dao.add(name=d["name"], phone=d["phone"], email=d["email"],
-                         address=d["address"],
-                         credit_limit=float(d["credit_limit"] or 0))
-            self.on_save(); self.destroy()
+            self.dao.add(
+                name=d["name"],
+                phone=d["phone"],
+                email=d["email"],
+                address=d["address"],
+                credit_limit=float(d["credit_limit"] or 0),
+            )
+
+            self.on_save()             
+            # --- avisa a toda la app que hay un cliente nuevo ---
+            self.winfo_toplevel().event_generate("<<ClientAdded>>", when="tail")
+            self.destroy()
         except Exception as e:
             messagebox.showerror("Error", str(e))
