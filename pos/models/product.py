@@ -1,3 +1,4 @@
+#product.py
 from typing import Sequence, Mapping
 import sqlite3
 

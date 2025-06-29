@@ -127,4 +127,17 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         )
     """)
 
+    # al final de _create_tables() en db.py
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cash_shifts(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opened  TEXT NOT NULL,
+            closed  TEXT,
+            opening_amount REAL NOT NULL
+        )
+    """)
+    cur.execute("INSERT OR IGNORE INTO cash_shifts(id, opened, opening_amount) "
+                "VALUES (1, datetime('now','localtime'), 0)")
+
+
     conn.commit()

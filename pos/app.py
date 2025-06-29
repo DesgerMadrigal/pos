@@ -50,8 +50,7 @@ class POSApp(tk.Tk):
                text="Ventas")
         nb.add(CashFrame(nb, self.dao_cash), text="Caja")
         nb.add(ClientFrame(nb, self.dao_client), text="Clientes")
-        nb.add(InventoryFrame(nb, self.dao_product, self.dao_inventory),
-               text="Inventario")
+        nb.add(InventoryFrame(nb,self.dao_product,self.dao_inventory,self.dao_warehouse),text="Inventario")
         nb.add(WarehouseFrame(nb, self.dao_warehouse), text="Almacenes")
         nb.add(SupplierFrame(nb, self.dao_supplier), text="Proveedores")
         nb.add(PayableFrame(nb, self.dao_payable, self.dao_supplier), text="Pagos")
