@@ -9,7 +9,7 @@ class ProductDAO:
     # CRUD ----------------------------------------------------------------
     def add(self, *, barcode: str, name: str, description: str = "",
             unit: str = "pz", price: float = 0, discount: float = 0,
-            iva: float = 0, sku: str = "", stock: int = 0) -> None:
+            iva: float = 0, sku: str = "", stock: int = 0) -> int:
         cur = self.conn.cursor()
         cur.execute("""
             INSERT INTO products(barcode,name,description,unit,price,
@@ -18,6 +18,13 @@ class ProductDAO:
         """, (barcode, name, description, unit, price,
               discount, iva, sku, stock))
         self.conn.commit()
+        return cur.lastrowid  # ← ID del nuevo producto
+
+    # comprobación de unicidad del SKU
+    def sku_exists(self, sku: str) -> bool:
+        cur = self.conn.cursor()
+        cur.execute("SELECT 1 FROM products WHERE sku = ? LIMIT 1", (sku,))
+        return cur.fetchone() is not None
 
     def search(self, text: str = ""):
         cur = self.conn.cursor()

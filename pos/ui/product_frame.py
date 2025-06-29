@@ -81,6 +81,12 @@ class AddProductWindow(tk.Toplevel):
         self.inputs["barcode"].insert(0, barcode)
         self.inputs["barcode"]["state"] = "readonly"  # evita edición
 
+        # ---- Autogenera el SKU ----
+        sku = self._new_sku()
+        self.inputs["sku"].insert(0, sku)
+        self.inputs["sku"]["state"] = "readonly"
+
+
         ttk.Button(self, text="Guardar", command=self._save)\
             .grid(row=len(fields), columnspan=2, pady=10)
 
@@ -92,17 +98,46 @@ class AddProductWindow(tk.Toplevel):
             if not hasattr(self.dao, "barcode_exists") or not self.dao.barcode_exists(code):
                 return code
 
+    def _new_sku(self) -> str:
+        """Genera un SKU alfanumérico único (8 caracteres)."""
+        chars = "ABCDEFGHJKLMNPQRTUVWXYZ23456789"
+        while True:
+            code = "".join(random.choices(chars, k=8))
+            if not self.dao.sku_exists(code):
+                return code
+
+
     def _save(self):
         try:
             d = {k: v.get() for k, v in self.inputs.items()}
-            self.dao.add(barcode=d["barcode"], name=d["name"],
-                         description=d["description"],
-                         unit=d["unit"] or "pz",
-                         price=float(d["price"] or 0),
-                         discount=float(d["discount"] or 0),
-                         iva=float(d["iva"] or 0),
-                         sku=d["sku"], stock=int(d["stock"] or 0))
+            stock_qty = int(d["stock"] or 0)
+
+            # 1) crea producto con stock=0 (se actualizará vía movimiento)
+            pid = self.dao.add(
+                barcode=d["barcode"],
+                name=d["name"],
+                description=d["description"],
+                unit=d["unit"] or "pz",
+                price=float(d["price"] or 0),
+                discount=float(d["discount"] or 0),
+                iva=float(d["iva"] or 0),
+                sku=d["sku"],
+                stock=0,
+            )
+
+            # 2) registra inventario inicial (almacén 1)
+            if stock_qty > 0:
+                from ..models.inventory import InventoryDAO  # import local
+
+                InventoryDAO(self.dao.conn).move(
+                    product_id=pid,
+                    warehouse_id=1,
+                    qty=stock_qty,
+                    concept="Alta inicial",
+                )
+
             messagebox.showinfo("Éxito", "Producto registrado")
-            self.on_save(); self.destroy()
+            self.on_save()
+            self.destroy()
         except Exception as e:
             messagebox.showerror("Error", str(e))
